@@ -1,0 +1,176 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the Smart Mandi platform (Farmer or Buyer)",
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["farmer", "buyer"],
+          "description": "The role of the user"
+        },
+        "name": {
+          "type": "string",
+          "description": "Full name of the user"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Phone number"
+        },
+        "location": {
+          "type": "string",
+          "description": "City or village name"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the user registered"
+        }
+      },
+      "required": ["role", "name", "createdAt"]
+    },
+    "Crop": {
+      "title": "Crop",
+      "description": "A crop listing created by a farmer",
+      "type": "object",
+      "properties": {
+        "farmerId": {
+          "type": "string",
+          "description": "UID of the farmer who listed the crop"
+        },
+        "farmerName": {
+          "type": "string",
+          "description": "Name of the farmer"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the crop (e.g., Wheat, Rice)"
+        },
+        "quantity": {
+          "type": "number",
+          "description": "Quantity available in Quintals"
+        },
+        "price": {
+          "type": "number",
+          "description": "Expected price per Quintal"
+        },
+        "location": {
+          "type": "string",
+          "description": "Location of the crop"
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL of the crop image"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the crop was listed"
+        }
+      },
+      "required": ["farmerId", "farmerName", "name", "quantity", "price", "location", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat",
+      "description": "A chat session between a farmer and a buyer",
+      "type": "object",
+      "properties": {
+        "cropId": {
+          "type": "string",
+          "description": "ID of the crop being discussed"
+        },
+        "cropName": {
+          "type": "string",
+          "description": "Name of the crop"
+        },
+        "farmerId": {
+          "type": "string",
+          "description": "UID of the farmer"
+        },
+        "buyerId": {
+          "type": "string",
+          "description": "UID of the buyer"
+        },
+        "farmerName": {
+          "type": "string",
+          "description": "Name of the farmer"
+        },
+        "buyerName": {
+          "type": "string",
+          "description": "Name of the buyer"
+        },
+        "lastMessage": {
+          "type": "string",
+          "description": "The last message sent in the chat"
+        },
+        "updatedAt": {
+          "type": "timestamp",
+          "description": "When the chat was last updated"
+        }
+      },
+      "required": ["cropId", "farmerId", "buyerId", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message within a chat",
+      "type": "object",
+      "properties": {
+        "senderId": {
+          "type": "string",
+          "description": "UID of the sender"
+        },
+        "text": {
+          "type": "string",
+          "description": "The message text"
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the message was sent"
+        }
+      },
+      "required": ["senderId", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "User"
+      },
+      "description": "Stores user profiles"
+    },
+    "/crops/{cropId}": {
+      "schema": {
+        "$ref": "Crop"
+      },
+      "description": "Stores crop listings"
+    },
+    "/chats/{chatId}": {
+      "schema": {
+        "$ref": "Chat"
+      },
+      "description": "Stores chat sessions"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "Message"
+      },
+      "description": "Stores messages within a chat session"
+    }
+  },
+  "indexes": [
+    {
+      "collectionGroup": "crops",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chats",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cropId", "order": "ASCENDING" },
+        { "fieldPath": "buyerId", "order": "ASCENDING" }
+      ]
+    }
+  ]
+}

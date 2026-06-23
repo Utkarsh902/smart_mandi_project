@@ -1,0 +1,140 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['role', 'name', 'phone', 'location', 'createdAt']) &&
+             hasRequiredFields(['role', 'name', 'createdAt']) &&
+             data.role in ['farmer', 'buyer'] &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() < 20)) &&
+             (!('location' in data) || (data.location is string && data.location.size() < 100)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidCrop(data) {
+      return hasOnlyAllowedFields(['farmerId', 'farmerName', 'name', 'quantity', 'price', 'location', 'imageUrl', 'createdAt']) &&
+             hasRequiredFields(['farmerId', 'farmerName', 'name', 'quantity', 'price', 'location', 'createdAt']) &&
+             data.farmerId == request.auth.uid &&
+             data.farmerName is string && data.farmerName.size() > 0 && data.farmerName.size() < 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.quantity is number && data.quantity > 0 &&
+             data.price is number && data.price > 0 &&
+             data.location is string && data.location.size() > 0 && data.location.size() < 100 &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 1000)) &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidChat(data) {
+      return hasOnlyAllowedFields(['cropId', 'cropName', 'farmerId', 'buyerId', 'farmerName', 'buyerName', 'lastMessage', 'updatedAt']) &&
+             hasRequiredFields(['cropId', 'farmerId', 'buyerId', 'updatedAt']) &&
+             data.cropId is string && data.cropId.size() > 0 && data.cropId.size() < 100 &&
+             (!('cropName' in data) || (data.cropName is string && data.cropName.size() < 100)) &&
+             data.farmerId is string && data.farmerId.size() > 0 && data.farmerId.size() < 100 &&
+             data.buyerId is string && data.buyerId.size() > 0 && data.buyerId.size() < 100 &&
+             (!('farmerName' in data) || (data.farmerName is string && data.farmerName.size() < 100)) &&
+             (!('buyerName' in data) || (data.buyerName is string && data.buyerName.size() < 100)) &&
+             (!('lastMessage' in data) || (data.lastMessage is string && data.lastMessage.size() < 1000)) &&
+             data.updatedAt is timestamp;
+    }
+
+    function isValidMessage(data) {
+      return hasOnlyAllowedFields(['senderId', 'text', 'createdAt']) &&
+             hasRequiredFields(['senderId', 'text', 'createdAt']) &&
+             data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() > 0 && data.text.size() < 2000 &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Anyone authenticated can read user profiles (needed to show names in UI)
+      allow read: if isAuthenticated();
+      
+      // Users can create and update their own profiles
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    request.resource.data.role == resource.data.role; // Role cannot be changed
+    }
+
+    match /crops/{cropId} {
+      // Anyone authenticated can read crops
+      allow read: if isAuthenticated();
+      
+      // Only authenticated users can create crops (validation ensures farmerId == auth.uid)
+      allow create: if isAuthenticated() && isValidCrop(request.resource.data);
+      
+      // Only the farmer who created the crop can update or delete it
+      allow update: if isAuthenticated() && resource.data.farmerId == request.auth.uid &&
+                    isValidCrop(request.resource.data) &&
+                    request.resource.data.createdAt == resource.data.createdAt &&
+                    request.resource.data.farmerId == resource.data.farmerId;
+      allow delete: if isAuthenticated() && resource.data.farmerId == request.auth.uid;
+    }
+
+    match /chats/{chatId} {
+      // Only participants can read the chat
+      allow read: if isAuthenticated() && (resource.data.farmerId == request.auth.uid || resource.data.buyerId == request.auth.uid);
+      
+      // Participants can create a chat
+      allow create: if isAuthenticated() && 
+                    (request.resource.data.farmerId == request.auth.uid || request.resource.data.buyerId == request.auth.uid) &&
+                    isValidChat(request.resource.data);
+                    
+      // Participants can update the chat (e.g., lastMessage, updatedAt)
+      allow update: if isAuthenticated() && 
+                    (resource.data.farmerId == request.auth.uid || resource.data.buyerId == request.auth.uid) &&
+                    isValidChat(request.resource.data) &&
+                    request.resource.data.farmerId == resource.data.farmerId &&
+                    request.resource.data.buyerId == resource.data.buyerId &&
+                    request.resource.data.cropId == resource.data.cropId;
+                    
+      match /messages/{messageId} {
+        // Only participants of the parent chat can read messages
+        allow read: if isAuthenticated() && 
+                    (get(/databases/$(database)/documents/chats/$(chatId)).data.farmerId == request.auth.uid || 
+                     get(/databases/$(database)/documents/chats/$(chatId)).data.buyerId == request.auth.uid);
+                     
+        // Only participants can create messages
+        allow create: if isAuthenticated() && 
+                      (get(/databases/$(database)/documents/chats/$(chatId)).data.farmerId == request.auth.uid || 
+                       get(/databases/$(database)/documents/chats/$(chatId)).data.buyerId == request.auth.uid) &&
+                      isValidMessage(request.resource.data);
+      }
+    }
+    match /price_cache/{cacheId} {
+      // Allow authenticated users to read and write to the cache
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+  }
+}
