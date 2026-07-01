@@ -205,9 +205,9 @@ Chaudhary Charan Singh University, Meerut
 
 ## ⭐ Project Highlights
 
-* Live deployed web application
-* AI-powered voice assistant integration
-* Role-based authentication system
-* Real-time chat functionality
-* Secure Firestore database architecture
-* Modern React + TypeScript development stack
+* Live deployed web application.
+* AI-powered voice assistant integration.
+* Role-based authentication system.
+* Real-time chat functionality.
+* Secure Firestore database architecture.
+* Modern React + TypeScript development stack.
